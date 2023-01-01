@@ -124,7 +124,7 @@ class AssetsManager {
 
 const assets: AssetDefinition[] = [
   {
-    src: "/public/pattern2.png",
+    src: "/public/pattern5.png",
     id: "pattern-texture",
     type: "texture",
   },

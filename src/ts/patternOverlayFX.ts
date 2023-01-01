@@ -4,7 +4,7 @@ import { BlendFunction, Effect } from "postprocessing";
 import fragmentShader from "../shaders/hardMixBlendPattern.fragment.glsl?raw";
 import { settings } from "./settings";
 
-class HardMixPatternBlendEffect extends Effect {
+class PatternOverlayFX extends Effect {
   resolution: Vector2;
 
   constructor(patternTexture: Texture) {
@@ -31,4 +31,4 @@ class HardMixPatternBlendEffect extends Effect {
   }
 }
 
-export { HardMixPatternBlendEffect };
+export { PatternOverlayFX };

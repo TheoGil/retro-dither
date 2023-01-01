@@ -31,9 +31,11 @@ class Plane {
   }
 
   setScaleUniform() {
-    // Input Aspect Ratio
-    const IAR =
-      this.texture.image.naturalHeight / this.texture.image.naturalWidth;
+    // // Input Aspect Ratio
+    // const IAR =
+    //   this.texture.image.naturalHeight / this.texture.image.naturalWidth;
+
+    const IAR = 1;
 
     // Output Aspect Ratio
     const OAR = window.innerHeight / window.innerWidth;

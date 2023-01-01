@@ -5,6 +5,7 @@ import {
   OrthographicCamera,
   LinearFilter,
   Vector2,
+  Clock,
 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import {
@@ -14,9 +15,9 @@ import {
   EffectComposer,
   EffectPass,
   HueSaturationEffect,
+  NoiseEffect,
   PixelationEffect,
   RenderPass,
-  TiltShiftEffect,
   VignetteEffect,
 } from "postprocessing";
 import { Pane } from "tweakpane";
@@ -24,9 +25,10 @@ import { Pane } from "tweakpane";
 import { assets, AssetsManager } from "./assets";
 import { Plane } from "./plane";
 import { settings } from "./settings";
-import { HardMixPatternBlendEffect } from "./hardMixPatternBlendEffect";
+import { PatternOverlayFX } from "./patternOverlayFX";
 import { ColorizeEffect } from "./colorizeEffect";
 import { CustomNoiseEffect } from "./customNoiseEfect";
+import { TrailTexture } from "./mode/trailTexture";
 
 class App {
   camera!: OrthographicCamera;
@@ -37,9 +39,10 @@ class App {
   composer!: EffectComposer;
   plane!: Plane;
   pane!: Pane;
-  pixelisationEffect!: PixelationEffect;
-  hardMixPatternBlendEffect!: HardMixPatternBlendEffect;
-  brightnesContrastEffect!: BrightnessContrastEffect;
+  pixelisationFX!: PixelationEffect;
+  patternOverlayFX!: PatternOverlayFX;
+  trailTexture!: TrailTexture;
+  clock!: Clock;
 
   constructor() {
     this.animate = this.animate.bind(this);
@@ -54,10 +57,18 @@ class App {
     this.initAssetManager();
     await this.loadAssets();
     this.initDebug();
-    this.initPostProcessing();
+    this.initPostFX();
+    this.clock = new Clock();
 
-    this.plane = new Plane(this.assetManager.get("plane-texture") as Texture);
-    this.scene.add(this.plane.mesh);
+    const searchParams = new URLSearchParams(window.location.search);
+    const mode = searchParams.get("mode");
+
+    switch (mode) {
+      case "trail":
+      default:
+        this.initMouseTrailPlane();
+        break;
+    }
   }
 
   initRenderer() {
@@ -91,7 +102,6 @@ class App {
   async loadAssets() {
     assets.forEach((asset) => {
       this.assetManager.add(asset);
-      console.log(asset);
     });
 
     await this.assetManager.load();
@@ -107,94 +117,131 @@ class App {
     this.pane = new Pane();
   }
 
-  initPostProcessing() {
+  initPostFX() {
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
 
-    this.initPixelisationEffect();
-    this.initLevelsAdjustementsEffect();
-    this.initHardMixPatternBlendEffect();
-    this.initColorizeEffect();
-    this.initBloomEffect();
-    this.initNoiseEffect();
-    this.initVignetteEffect();
-    this.initChromaticAberrationEffect();
-
-    const folder = this.pane.addFolder({
-      title: "Pixelisation",
+    this.postFXFolder = this.pane.addFolder({
+      title: "PostFX",
+      expanded: false,
     });
 
-    folder
-      .addInput(settings, "granularity", {
-        min: 1,
+    // Main "retro dither" effect consist only of the three following passes
+    // pixelisation -> contrast / brightness -> pattern overlay
+    this.initPixelisationFX();
+    this.initBrightnessContrastFX();
+    this.initPatternOverlayFX();
+
+    // The following passes are not relevant to "retro dither" effect but add a nice polished touch
+    this.initColorizeFX();
+    this.initBloomFX();
+    this.initNoiseFX();
+    this.initVignetteFX();
+    this.initChromaticAberrationFX();
+  }
+
+  initPixelisationFX() {
+    this.pixelisationFX = new PixelationEffect(settings.granularity);
+    this.composer.addPass(new EffectPass(this.camera, this.pixelisationFX));
+
+    const folder = this.postFXFolder.addFolder({
+      title: "Pixelisation",
+      expanded: false,
+    });
+
+    folder.addInput(this.pixelisationFX, "granularity", {
+      min: 2,
+      max: 100,
+      // Must be a multiple of 2 as pixelisation effect only works with multiples of 2
+      // https://github.com/pmndrs/postprocessing/blob/main/src/effects/PixelationEffect.js#L68
+      step: 2,
+      label: "size",
+    });
+  }
+
+  initBrightnessContrastFX() {
+    this.composer.addPass(
+      new EffectPass(
+        this.camera,
+        new HueSaturationEffect({
+          saturation: -1,
+        })
+      )
+    );
+
+    const fx = new BrightnessContrastEffect({
+      brightness: settings.brightness,
+      contrast: settings.contrast,
+    });
+
+    this.composer.addPass(new EffectPass(this.camera, fx));
+
+    const levelsFolder = this.postFXFolder.addFolder({
+      title: "Brightness / Contrast",
+      expanded: false,
+    });
+
+    levelsFolder.addInput(fx, "brightness", {
+      min: -1,
+      max: 1,
+    });
+
+    levelsFolder.addInput(fx, "contrast", {
+      min: -1,
+      max: 1,
+    });
+  }
+
+  initPatternOverlayFX() {
+    this.patternOverlayFX = new PatternOverlayFX(
+      this.assetManager.get("pattern-texture") as Texture
+    );
+
+    const pass = new EffectPass(this.camera, this.patternOverlayFX);
+
+    this.composer.addPass(pass);
+
+    const folder = this.postFXFolder.addFolder({
+      title: "Pattern Overlay",
+      expanded: false,
+    });
+
+    folder.addInput(pass, "enabled");
+
+    folder.addInput(
+      this.patternOverlayFX.uniforms.get("uGranularity"),
+      "value",
+      {
+        min: 2,
         max: 100,
         // Must be a multiple of 2 as pixelisation effect only works with multiples of 2
         // https://github.com/pmndrs/postprocessing/blob/main/src/effects/PixelationEffect.js#L68
         step: 2,
-      })
-      .on("change", ({ value }: { value: number }) => {
-        this.pixelisationEffect.granularity = value;
-        this.hardMixPatternBlendEffect.granularity = value;
-      });
-  }
-
-  initPixelisationEffect() {
-    this.pixelisationEffect = new PixelationEffect(settings.granularity);
-    this.composer.addPass(new EffectPass(this.camera, this.pixelisationEffect));
-  }
-
-  initLevelsAdjustementsEffect() {
-    const hueSaturationEffect = new HueSaturationEffect({
-      saturation: -1,
-    });
-    this.composer.addPass(new EffectPass(this.camera, hueSaturationEffect));
-
-    this.brightnesContrastEffect = new BrightnessContrastEffect({
-      brightness: settings.brightness,
-      contrast: settings.contrast,
-    });
-    this.composer.addPass(
-      new EffectPass(this.camera, this.brightnesContrastEffect)
-    );
-
-    const levelsFolder = this.pane.addFolder({
-      title: "Levels",
-    });
-
-    levelsFolder.addInput(this.brightnesContrastEffect, "brightness", {
-      min: -1,
-      max: 1,
-    });
-
-    levelsFolder.addInput(this.brightnesContrastEffect, "contrast", {
-      min: -1,
-      max: 1,
-    });
-  }
-
-  initHardMixPatternBlendEffect() {
-    this.hardMixPatternBlendEffect = new HardMixPatternBlendEffect(
-      this.assetManager.get("pattern-texture") as Texture
-    );
-    this.composer.addPass(
-      new EffectPass(this.camera, this.hardMixPatternBlendEffect)
+        label: "size",
+      }
     );
   }
 
-  initColorizeEffect() {
-    const colorizeEffect = new ColorizeEffect();
-    this.composer.addPass(new EffectPass(this.camera, colorizeEffect));
+  initColorizeFX() {
+    const fx = new ColorizeEffect();
 
-    const folder = this.pane.addFolder({
+    const pass = new EffectPass(this.camera, fx);
+
+    this.composer.addPass(pass);
+
+    const folder = this.postFXFolder.addFolder({
       title: "Color",
+      expanded: false,
     });
+
+    folder.addInput(pass, "enabled");
 
     folder
       .addInput(settings, "foregroundColor", {
         label: "foreground",
       })
       .on("change", ({ value }: { value: string }) => {
-        colorizeEffect.foregroundColor = value;
+        fx.foregroundColor = value;
       });
 
     folder
@@ -202,52 +249,63 @@ class App {
         label: "background",
       })
       .on("change", ({ value }: { value: string }) => {
-        colorizeEffect.backgroundColor = value;
+        fx.backgroundColor = value;
       });
   }
 
-  initBloomEffect() {
-    const bloomEffect = new BloomEffect({
+  initBloomFX() {
+    const fx = new BloomEffect({
       luminanceThreshold: settings.bloom.threshold,
       luminanceSmoothing: settings.bloom.smoothing,
       intensity: settings.bloom.intensity,
     });
 
-    this.composer.addPass(new EffectPass(this.camera, bloomEffect));
+    const pass = new EffectPass(this.camera, fx);
 
-    const bloomFolder = this.pane.addFolder({
+    this.composer.addPass(pass);
+
+    const folder = this.postFXFolder.addFolder({
       title: "Bloom",
+      expanded: false,
     });
 
-    bloomFolder.addInput(bloomEffect.luminanceMaterial, "threshold", {
+    folder.addInput(pass, "enabled");
+
+    folder.addInput(fx.luminanceMaterial, "threshold", {
       min: 0,
       max: 1,
     });
 
-    bloomFolder.addInput(bloomEffect.luminanceMaterial, "smoothing", {
+    folder.addInput(fx.luminanceMaterial, "smoothing", {
       min: 0,
       max: 1,
     });
 
-    bloomFolder.addInput(bloomEffect, "intensity", {
+    folder.addInput(fx, "intensity", {
       min: 0,
       max: 5,
     });
 
-    bloomEffect.blurPass.scale = settings.bloom.scale;
-    bloomFolder.addInput(bloomEffect.blurPass, "scale", {
+    fx.blurPass.scale = settings.bloom.scale;
+    folder.addInput(fx.blurPass, "scale", {
       min: 0,
       max: 5,
     });
   }
 
-  initNoiseEffect() {
-    const noiseEffect = new CustomNoiseEffect();
-    this.composer.addPass(new EffectPass(this.camera, noiseEffect));
+  initNoiseFX() {
+    const fx = new CustomNoiseEffect();
 
-    const folder = this.pane.addFolder({
+    const pass = new EffectPass(this.camera, fx);
+
+    this.composer.addPass(pass);
+
+    const folder = this.postFXFolder.addFolder({
       title: "Noise",
+      expanded: false,
     });
+
+    folder.addInput(pass, "enabled");
 
     folder
       .addInput(settings.noise, "threshold", {
@@ -256,7 +314,7 @@ class App {
         step: 0.001,
       })
       .on("change", ({ value }: { value: number }) => {
-        noiseEffect.threshold = value;
+        fx.threshold = value;
       });
 
     folder
@@ -265,47 +323,55 @@ class App {
         max: 1,
       })
       .on("change", ({ value }: { value: number }) => {
-        noiseEffect.opacity = value;
+        fx.opacity = value;
       });
   }
 
-  initVignetteEffect() {
-    const vignetteEffect = new VignetteEffect({
+  initVignetteFX() {
+    const fx = new VignetteEffect({
       offset: settings.vignette.offset,
       darkness: settings.vignette.darkness,
     });
-    this.composer.addPass(new EffectPass(this.camera, vignetteEffect));
 
-    const folder = this.pane.addFolder({
+    const pass = new EffectPass(this.camera, fx);
+
+    this.composer.addPass(pass);
+
+    const folder = this.postFXFolder.addFolder({
       title: "Vignette",
+      expanded: false,
     });
 
-    folder.addInput(vignetteEffect, "offset", {
+    folder.addInput(pass, "enabled");
+
+    folder.addInput(fx, "offset", {
       min: 0,
       max: 1,
     });
 
-    folder.addInput(vignetteEffect, "darkness", {
+    folder.addInput(fx, "darkness", {
       min: 0,
       max: 1,
     });
   }
 
-  initChromaticAberrationEffect() {
-    const chromaticAberrationEffect = new ChromaticAberrationEffect({
+  initChromaticAberrationFX() {
+    const fx = new ChromaticAberrationEffect({
       offset: settings.chromaticAberration.offset,
       radialModulation: settings.chromaticAberration.radialModulation,
       modulationOffset: settings.chromaticAberration.modulationOffset,
     });
-    this.composer.addPass(
-      new EffectPass(this.camera, chromaticAberrationEffect)
-    );
 
-    const folder = this.pane.addFolder({
+    const pass = new EffectPass(this.camera, fx);
+
+    this.composer.addPass(pass);
+
+    const folder = this.postFXFolder.addFolder({
       title: "Chromatic aberration",
+      expanded: false,
     });
 
-    folder.addInput(chromaticAberrationEffect, "offset", {
+    folder.addInput(fx, "offset", {
       x: {
         min: -0.1,
         max: 0.1,
@@ -316,15 +382,79 @@ class App {
       },
     });
 
-    folder.addInput(chromaticAberrationEffect, "radialModulation");
+    folder.addInput(fx, "radialModulation");
 
-    folder.addInput(chromaticAberrationEffect, "modulationOffset", {
+    folder.addInput(fx, "modulationOffset", {
+      min: 0,
+      max: 1,
+    });
+  }
+
+  initMouseTrailPlane() {
+    this.trailTexture = new TrailTexture({
+      radius: settings.trailTexture.radius,
+      maxAge: settings.trailTexture.maxAge,
+      intensity: settings.trailTexture.intensity,
+      interpolate: settings.trailTexture.interpolate,
+      smoothing: settings.trailTexture.smoothing,
+      minForce: settings.trailTexture.minForce,
+    });
+
+    this.plane = new Plane(this.trailTexture.texture);
+    this.scene.add(this.plane.mesh);
+
+    document.body.appendChild(this.trailTexture.canvas);
+    this.trailTexture.canvas.style.position = "fixed";
+    this.trailTexture.canvas.style.top = "0px";
+    this.trailTexture.canvas.style.left = "0px";
+
+    this.renderer.domElement.addEventListener("mousemove", (e) => {
+      this.trailTexture.addTouch({
+        x: e.clientX / this.renderer.domElement.width,
+        y: 1 - e.clientY / this.renderer.domElement.height,
+      });
+    });
+
+    const trailFolder = this.pane.addFolder({
+      title: "Trail",
+      expanded: false,
+    });
+
+    trailFolder.addInput(this.trailTexture, "maxAge", {
+      min: 1,
+      max: 2000,
+      step: 1,
+    });
+
+    trailFolder.addInput(this.trailTexture, "radius", {
+      min: 0,
+      max: 0.2,
+      step: 0.001,
+    });
+
+    trailFolder.addInput(this.trailTexture, "intensity", {
+      min: 0,
+      max: 1,
+    });
+
+    trailFolder.addInput(this.trailTexture, "interpolate", {
+      min: 0,
+      max: 1,
+    });
+
+    trailFolder.addInput(this.trailTexture, "smoothing", {
+      min: 0,
+      max: 1,
+    });
+
+    trailFolder.addInput(this.trailTexture, "minForce", {
       min: 0,
       max: 1,
     });
   }
 
   animate() {
+    this.trailTexture?.update(this.clock.getDelta());
     this.composer?.render();
     requestAnimationFrame(this.animate);
   }
@@ -333,14 +463,11 @@ class App {
     const w = window.innerWidth;
     const h = window.innerHeight;
 
-    this.renderer.setSize(w, h);
+    this.composer.setSize(w, h);
 
     this.camera.updateProjectionMatrix();
 
     this.plane.setScaleUniform();
-
-    this.pixelisationEffect.setSize(w, h);
-    this.hardMixPatternBlendEffect.setSize(w, h);
   }
 }
 
