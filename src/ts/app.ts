@@ -25,9 +25,9 @@ import { Pane } from "tweakpane";
 import { assets, AssetsManager } from "./assets";
 import { Plane } from "./plane";
 import { settings } from "./settings";
-import { PatternOverlayFX } from "./patternOverlayFX";
-import { ColorizeEffect } from "./colorizeEffect";
-import { CustomNoiseEffect } from "./customNoiseEfect";
+import { PatternOverlayFX } from "./postprocessing/patternOverlayFX";
+import { ColorizeFX } from "./postprocessing/colorizeFX";
+import { CustomNoiseFX } from "./postprocessing/customNoiseFX";
 import { TrailTexture } from "./mode/trailTexture";
 
 class App {
@@ -223,7 +223,7 @@ class App {
   }
 
   initColorizeFX() {
-    const fx = new ColorizeEffect();
+    const fx = new ColorizeFX();
 
     const pass = new EffectPass(this.camera, fx);
 
@@ -294,7 +294,7 @@ class App {
   }
 
   initNoiseFX() {
-    const fx = new CustomNoiseEffect();
+    const fx = new CustomNoiseFX();
 
     const pass = new EffectPass(this.camera, fx);
 

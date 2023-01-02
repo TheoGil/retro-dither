@@ -1,10 +1,10 @@
 import { Uniform } from "three";
 import { BlendFunction, Effect } from "postprocessing";
 
-import fragmentShader from "../shaders/customNoise.fragment.glsl?raw";
-import { settings } from "./settings";
+import fragmentShader from "../../shaders/customNoise.fragment.glsl?raw";
+import { settings } from "../settings";
 
-class CustomNoiseEffect extends Effect {
+class CustomNoiseFX extends Effect {
   constructor() {
     super("CustomNoise", fragmentShader, {
       blendFunction: BlendFunction.LIGHTEN,
@@ -24,4 +24,4 @@ class CustomNoiseEffect extends Effect {
   }
 }
 
-export { CustomNoiseEffect };
+export { CustomNoiseFX };

@@ -1,8 +1,8 @@
 import { Texture, Uniform, Vector2 } from "three";
 import { BlendFunction, Effect } from "postprocessing";
 
-import fragmentShader from "../shaders/hardMixBlendPattern.fragment.glsl?raw";
-import { settings } from "./settings";
+import fragmentShader from "../../shaders/hardMixBlendPattern.fragment.glsl?raw";
+import { settings } from "../settings";
 
 class PatternOverlayFX extends Effect {
   resolution: Vector2;
