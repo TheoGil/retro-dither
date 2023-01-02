@@ -42,7 +42,9 @@ class TrailTexture {
   ctx: CanvasRenderingContext2D;
   texture: Texture;
   force: number;
-  size: number;
+  width: number;
+  height: number;
+  ratio: number;
   maxAge: number;
   radius: number;
   intensity: number;
@@ -51,9 +53,13 @@ class TrailTexture {
   interpolate: number;
   smoothing: number;
   blend: CanvasRenderingContext2D["globalCompositeOperation"];
+  opacity = 1;
+  debug = false;
 
   constructor({
-    size = 64,
+    ratio = 10,
+    width = 64,
+    height = 64,
     maxAge = 750,
     radius = 0.05,
     intensity = 0.5,
@@ -63,7 +69,9 @@ class TrailTexture {
     blend = "screen", // source-over is canvas default. Others are slower
     ease = easeLinear,
   } = {}) {
-    this.size = size;
+    this.width = width;
+    this.height = height;
+    this.ratio = ratio;
     this.maxAge = maxAge;
     this.radius = radius;
     this.intensity = intensity;
@@ -80,16 +88,16 @@ class TrailTexture {
 
   initTexture() {
     this.canvas = document.createElement("canvas");
-    this.canvas.width = this.canvas.height = this.size;
+    this.canvas.width = this.width;
+    this.canvas.height = this.height;
     this.ctx = this.canvas.getContext("2d");
     this.ctx.fillStyle = "black";
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
     this.texture = new Texture(this.canvas);
 
-    this.canvas.id = "touchTexture";
-    this.canvas.style.width =
-      this.canvas.style.height = `${this.canvas.width}px`;
+    this.canvas.style.opacity = this.opacity;
+    this.canvas.style.display = this.debug ? "block" : "none";
   }
 
   update(delta) {
@@ -154,8 +162,8 @@ class TrailTexture {
 
   drawTouch(point) {
     const pos = {
-      x: point.x * this.size,
-      y: (1 - point.y) * this.size,
+      x: point.x * this.width,
+      y: (1 - point.y) * this.height,
     };
 
     let intensity = 1;
@@ -172,7 +180,7 @@ class TrailTexture {
     // apply blending
     this.ctx.globalCompositeOperation = this.blend;
 
-    const radius = this.size * this.radius * intensity;
+    const radius = Math.max(this.width, this.height) * this.radius * intensity;
     const grd = this.ctx.createRadialGradient(
       pos.x,
       pos.y,
@@ -188,6 +196,16 @@ class TrailTexture {
     this.ctx.fillStyle = grd;
     this.ctx.arc(pos.x, pos.y, Math.max(0, radius), 0, Math.PI * 2);
     this.ctx.fill();
+  }
+
+  onResize() {
+    this.width = window.innerWidth / this.ratio;
+    this.height = window.innerHeight / this.ratio;
+
+    this.canvas.width = this.width;
+    this.canvas.height = this.height;
+
+    this.texture = new Texture(this.canvas);
   }
 }
 

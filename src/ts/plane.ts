@@ -31,18 +31,28 @@ class Plane {
   }
 
   setScaleUniform() {
-    // // Input Aspect Ratio
-    // const IAR =
-    //   this.texture.image.naturalHeight / this.texture.image.naturalWidth;
+    // Input Aspect Ratio
+    // If image
+    let IAR =
+      this.texture.image.naturalHeight / this.texture.image.naturalWidth;
 
-    const IAR = 1;
+    switch (this.texture.image.nodeName) {
+      case "CANVAS":
+        // If canvas
+        IAR = this.texture.image.height / this.texture.image.width;
+        break;
+    }
+
+    console.log(IAR);
 
     // Output Aspect Ratio
     const OAR = window.innerHeight / window.innerWidth;
 
     if (IAR > OAR) {
+      console.log(OAR / IAR);
       this.mesh.material.uniforms.uMapScale.value.set(1, OAR / IAR);
     } else {
+      console.log(IAR / OAR);
       this.mesh.material.uniforms.uMapScale.value.set(IAR / OAR, 1);
     }
   }

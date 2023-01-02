@@ -391,7 +391,12 @@ class App {
   }
 
   initMouseTrailPlane() {
+    const ratio = 15;
+
     this.trailTexture = new TrailTexture({
+      ratio,
+      width: window.innerWidth / ratio,
+      height: window.innerHeight / ratio,
       radius: settings.trailTexture.radius,
       maxAge: settings.trailTexture.maxAge,
       intensity: settings.trailTexture.intensity,
@@ -407,11 +412,14 @@ class App {
     this.trailTexture.canvas.style.position = "fixed";
     this.trailTexture.canvas.style.top = "0px";
     this.trailTexture.canvas.style.left = "0px";
+    this.trailTexture.canvas.style.width = "100%";
+    this.trailTexture.canvas.style.height = "100%";
+    this.trailTexture.canvas.style.pointerEvents = "none";
 
-    this.renderer.domElement.addEventListener("mousemove", (e) => {
+    window.addEventListener("mousemove", (e) => {
       this.trailTexture.addTouch({
-        x: e.clientX / this.renderer.domElement.width,
-        y: 1 - e.clientY / this.renderer.domElement.height,
+        x: e.clientX / window.innerWidth,
+        y: 1 - e.clientY / window.innerHeight,
       });
     });
 
@@ -419,6 +427,21 @@ class App {
       title: "Trail",
       expanded: false,
     });
+
+    trailFolder
+      .addInput(this.trailTexture, "debug")
+      .on("change", ({ value }) => {
+        this.trailTexture.canvas.style.display = value ? "block" : "none";
+      });
+
+    trailFolder
+      .addInput(this.trailTexture, "opacity", {
+        min: 0,
+        max: 1,
+      })
+      .on("change", ({ value }) => {
+        this.trailTexture.canvas.style.opacity = value;
+      });
 
     trailFolder.addInput(this.trailTexture, "maxAge", {
       min: 1,
@@ -466,6 +489,9 @@ class App {
     this.composer.setSize(w, h);
 
     this.camera.updateProjectionMatrix();
+
+    this.trailTexture.onResize();
+    this.plane.mesh.material.uniforms.tMap.value = this.trailTexture.texture;
 
     this.plane.setScaleUniform();
   }
